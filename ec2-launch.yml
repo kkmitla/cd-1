@@ -1,0 +1,62 @@
+---
+- name: Create a Sandbox instance
+  hosts: localhost
+  gather_facts: no
+
+
+  vars:
+      keypair: ansible_demo
+      group: default
+      instance_type: t2.micro
+      image: ami-f4533694
+      vpcid: subnet-ae52eaf5
+      region: us-west-2
+      ackey: AKIAILBLAQMQGFZUKWXA
+      sekey: FOIfs9odB0oXHWvXxlX/7zQuh0K3y6y+Kp2Nyng1
+
+  tasks:
+  - name: Launch EC2 instance
+    ec2:
+       key_name: "{{ keypair }}"
+       group: "{{ group }}"
+       instance_type: "{{ instance_type }}"
+       image: "{{ image }}"
+       wait: true
+       region: "{{ region }}"
+       aws_access_key: "{{ ackey }}"
+       aws_secret_key: "{{ sekey }}"
+       instance_tags:
+          Name: Demo
+    register: ec2
+
+  - name: Print all ec2 variables.
+    debug: var=ec2
+
+  - name: Add EC2 instances to inventory groups.
+    add_host:
+      hostname: "{{ item.public_ip}}"
+      groupname: launched
+      host_key_checking: False
+      ansible_ssh_user: centos
+    with_items: "{{ ec2.instances }}"
+
+  - name: Wait for SSH to come up
+    wait_for:
+     host: "{{ item.public_dns_name }}"
+     port: 22
+     delay: 60
+     timeout: 320
+     state: started
+    with_items: "{{ ec2.instances }}"
+
+- name: Configure instances
+  hosts: launched
+  user: centos
+  become: True
+  gather_facts: True
+  vars_files: 
+    - ./group_vars/qa-prod
+  roles:
+    - selinux
+    - tomcat
+
